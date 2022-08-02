@@ -265,10 +265,7 @@ def main(**kwargs) -> None:
     data = json.dumps(registration_definition, sort_keys=True, indent=3)
 
     outputfile: str = None
-    if kwargs["outputfile"]:
-        outputfile = kwargs["outputfile"]
-    else:
-        outputfile = f"{os.cwd()}/hpvs-fhe-registration.txt"
+    outputfile = kwargs["outputfile"] or f"{os.cwd()}/hpvs-fhe-registration.txt"
     with open(outputfile, "w") as f:
         f.write(data)
     sys.exit(0)
@@ -365,7 +362,7 @@ def _inspect_docker_repo(repo_name: str) -> Dict:
         else:
             result = di_output
     except CalledProcessError as e:
-        print(str(e))
+        print(e)
         print(f"Error: Unable to inspect the container image '{repo_name}'")
     finally:
         return result
@@ -393,7 +390,7 @@ def _extract_root_key_id(repo_inspect: Dict) -> str:
                     if "ID" in key:
                         return key["ID"]
 
-    print(f"Error: Unable to find ID of Root signing key for targeted repository")
+    print("Error: Unable to find ID of Root signing key for targeted repository")
     return None
 
 
@@ -417,32 +414,36 @@ def _extract_public_key(repo_name: str, root_key_id: str) -> str:
 
     # Find all files named root.json in the file tree anchored at ~/.docker
     for path in glob.glob(f"{Path.home()}/.docker/**/root.json", recursive=True):
-        if repo_name in path:
-            if path.endswith(f"{repo_name}/metadata/root.json"):
-                with open(path) as root_json_file:
-                    try:
-                        # Reconstruct the dict object
-                        readin = json.loads(root_json_file.read())
-                        if type(readin) != dict:
-                            print(
-                                "Error: Corrupted registration definition template file"
-                            )
-                        else:
+        if repo_name in path and path.endswith(
+            f"{repo_name}/metadata/root.json"
+        ):
+            with open(path) as root_json_file:
+                try:
+                    # Reconstruct the dict object
+                    readin = json.loads(root_json_file.read())
+                    if type(readin) != dict:
+                        print(
+                            "Error: Corrupted registration definition template file"
+                        )
+                    else:
 
-                            # Locate the entry containing the image's Root key ID
-                            docker_metadata: Dict = readin
-                            if (
+                        # Locate the entry containing the image's Root key ID
+                        docker_metadata: Dict = readin
+                        if (
                                 "signed" in docker_metadata
                                 and docker_metadata["signed"]
                             ):
-                                signed_keys: Dict = docker_metadata["signed"]
-                                if "keys" in signed_keys and signed_keys["keys"]:
-                                    if root_key_id in signed_keys["keys"]:
-                                        return signed_keys["keys"][root_key_id][
-                                            "keyval"
-                                        ]["public"]
-                    except:
-                        print("Error: Cannot read container metadata file")
+                            signed_keys: Dict = docker_metadata["signed"]
+                            if (
+                                "keys" in signed_keys
+                                and signed_keys["keys"]
+                                and root_key_id in signed_keys["keys"]
+                            ):
+                                return signed_keys["keys"][root_key_id][
+                                    "keyval"
+                                ]["public"]
+                except:
+                    print("Error: Cannot read container metadata file")
 
     return None
 
